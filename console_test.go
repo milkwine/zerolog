@@ -30,6 +30,14 @@ func ExampleConsoleWriter_customFormatters() {
 	// Output: <nil> INFO  | Hello World foo:BAR
 }
 
+func ExampleConsoleWriter_fieldsOrder() {
+
+	out := zerolog.ConsoleWriter{Out: os.Stdout, NoColor: true, FieldsOrder: []string{"z", "b"}}
+	log := zerolog.New(out)
+	log.Info().Str("a", "aaa").Str("b", "bbb").Str("z", "zzz").Msg("Hello World")
+	// Output: <nil> INF Hello World z=zzz b=bbb a=aaa
+}
+
 func ExampleNewConsoleWriter() {
 	out := zerolog.NewConsoleWriter()
 	out.NoColor = true // For testing purposes only
@@ -336,6 +344,24 @@ func TestConsoleWriterConfiguration(t *testing.T) {
 			t.Errorf("Unexpected output %q, want: %q", actualOutput, expectedOutput)
 		}
 	})
+
+	t.Run("Sets FieldsOrder", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		w := zerolog.ConsoleWriter{Out: buf, NoColor: true, FieldsOrder: []string{"z", "b"}}
+
+		evt := `{"level": "info", "message": "Foobar", "a": "aaa", "b": "bbb", "z": "zzz"}`
+		_, err := w.Write([]byte(evt))
+		if err != nil {
+			t.Errorf("Unexpected error when writing output: %s", err)
+		}
+
+		expectedOutput := "<nil> INF Foobar z=zzz b=bbb a=aaa\n"
+		actualOutput := buf.String()
+		if actualOutput != expectedOutput {
+			t.Errorf("Unexpected output %q, want: %q", actualOutput, expectedOutput)
+		}
+	})
+
 }
 
 func BenchmarkConsoleWriter(b *testing.B) {

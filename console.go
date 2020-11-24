@@ -57,6 +57,9 @@ type ConsoleWriter struct {
 	// PartsOrder defines the order of parts in output.
 	PartsOrder []string
 
+	// FieldsOrder defines the order of fields in output.
+	FieldsOrder []string
+
 	FormatTimestamp     Formatter
 	FormatLevel         Formatter
 	FormatCaller        Formatter
@@ -70,9 +73,10 @@ type ConsoleWriter struct {
 // NewConsoleWriter creates and initializes a new ConsoleWriter.
 func NewConsoleWriter(options ...func(w *ConsoleWriter)) ConsoleWriter {
 	w := ConsoleWriter{
-		Out:        os.Stdout,
-		TimeFormat: consoleDefaultTimeFormat,
-		PartsOrder: consoleDefaultPartsOrder(),
+		Out:         os.Stdout,
+		TimeFormat:  consoleDefaultTimeFormat,
+		PartsOrder:  consoleDefaultPartsOrder(),
+		FieldsOrder: []string{},
 	}
 
 	for _, opt := range options {
@@ -119,33 +123,42 @@ func (w ConsoleWriter) Write(p []byte) (n int, err error) {
 
 // writeFields appends formatted key-value pairs to buf.
 func (w ConsoleWriter) writeFields(evt map[string]interface{}, buf *bytes.Buffer) {
-	var fields = make([]string, 0, len(evt))
-	for field := range evt {
-		switch field {
-		case LevelFieldName, TimestampFieldName, MessageFieldName, CallerFieldName:
-			continue
+
+	var priorFilds = make([]string, 0, len(evt))
+
+	// "error" field will move to front
+	for _, field := range append([]string{ErrorFieldName}, w.FieldsOrder...) {
+		if _, ok := evt[field]; ok {
+			priorFilds = append(priorFilds, field)
 		}
-		fields = append(fields, field)
 	}
+
+	var filter = make([]string, 0, len(priorFilds)+4)
+	filter = append(priorFilds, LevelFieldName, TimestampFieldName, MessageFieldName, CallerFieldName)
+
+	var fields = make([]string, 0, len(evt))
+
+	for field := range evt {
+
+		find := false
+		for _, f := range filter {
+			if field == f {
+				find = true
+				break
+			}
+		}
+
+		if !find {
+			fields = append(fields, field)
+		}
+	}
+
 	sort.Strings(fields)
+
+	fields = append(priorFilds, fields...)
 
 	if len(fields) > 0 {
 		buf.WriteByte(' ')
-	}
-
-	// Move the "error" field to the front
-	ei := sort.Search(len(fields), func(i int) bool { return fields[i] >= ErrorFieldName })
-	if ei < len(fields) && fields[ei] == ErrorFieldName {
-		fields[ei] = ""
-		fields = append([]string{ErrorFieldName}, fields...)
-		var xfields = make([]string, 0, len(fields))
-		for _, field := range fields {
-			if field == "" { // Skip empty fields
-				continue
-			}
-			xfields = append(xfields, field)
-		}
-		fields = xfields
 	}
 
 	for i, field := range fields {
